@@ -4,43 +4,25 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>霓虹贪吃蛇</title>
-    <meta
-      name="description"
-      content="一个可在电脑和手机上玩的网页版贪吃蛇游戏。"
-    />
+    <meta name="description" content="一个适合手机和电脑玩的网页版贪吃蛇游戏。" />
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
     <main class="app" aria-label="霓虹贪吃蛇游戏">
-      <section class="playfield" aria-label="游戏区">
-        <div class="topbar">
+      <section class="game-shell" aria-label="游戏区">
+        <header class="topbar">
           <div>
             <p class="eyebrow">SNAKE ONLINE</p>
             <h1>霓虹贪吃蛇</h1>
           </div>
-          <button class="icon-button" id="shareButton" type="button" aria-label="分享游戏">
-            ↗
-          </button>
-        </div>
+          <button class="icon-button" id="shareButton" type="button" aria-label="分享游戏">↗</button>
+        </header>
 
-        <div class="board-wrap">
-          <canvas id="gameCanvas" width="560" height="560" aria-label="贪吃蛇画布"></canvas>
-          <div class="overlay" id="overlay">
-            <p id="overlayTitle">准备开始</p>
-            <span id="overlayHint">按空格或点击开始</span>
+        <div class="mobile-score" aria-label="当前成绩">
+          <div>
+            <span>玩家</span>
+            <strong id="currentPlayer">未登录</strong>
           </div>
-        </div>
-
-        <div class="controls" aria-label="手机方向控制">
-          <button type="button" data-dir="up" aria-label="向上">↑</button>
-          <button type="button" data-dir="left" aria-label="向左">←</button>
-          <button type="button" data-dir="down" aria-label="向下">↓</button>
-          <button type="button" data-dir="right" aria-label="向右">→</button>
-        </div>
-      </section>
-
-      <aside class="panel" aria-label="状态和操作">
-        <div class="score-grid">
           <div>
             <span>分数</span>
             <strong id="score">0</strong>
@@ -49,37 +31,89 @@
             <span>最高</span>
             <strong id="best">0</strong>
           </div>
-          <div>
-            <span>速度</span>
-            <strong id="speed">1x</strong>
+        </div>
+
+        <div class="board-wrap">
+          <canvas id="gameCanvas" width="560" height="560" aria-label="贪吃蛇画布"></canvas>
+          <div class="overlay" id="overlay">
+            <p id="overlayTitle">请先登录</p>
+            <span id="overlayHint">创建玩家后即可开始</span>
           </div>
         </div>
 
-        <div class="actions">
-          <button class="primary" id="startButton" type="button">开始</button>
-          <button id="pauseButton" type="button">暂停</button>
-          <button id="resetButton" type="button">重开</button>
+        <div class="touch-pad" aria-label="手机方向控制">
+          <button type="button" data-dir="up" aria-label="向上">↑</button>
+          <button type="button" data-dir="left" aria-label="向左">←</button>
+          <button type="button" data-dir="down" aria-label="向下">↓</button>
+          <button type="button" data-dir="right" aria-label="向右">→</button>
         </div>
+      </section>
 
-        <div class="settings">
-          <label for="difficulty">难度</label>
-          <select id="difficulty">
-            <option value="easy">轻松</option>
-            <option value="normal" selected>标准</option>
-            <option value="hard">刺激</option>
-          </select>
-        </div>
+      <aside class="panel" aria-label="状态和操作">
+        <section class="account-card" aria-label="账号">
+          <div class="panel-title">
+            <h2>玩家账号</h2>
+            <button id="logoutButton" type="button">退出</button>
+          </div>
+          <form id="authForm" class="auth-form">
+            <div class="auth-tabs" role="group" aria-label="登录或注册">
+              <button class="active" id="loginTab" type="button">登录</button>
+              <button id="registerTab" type="button">注册</button>
+            </div>
+            <label>
+              账号
+              <input id="accountInput" name="account" autocomplete="username" required minlength="3" maxlength="18" />
+            </label>
+            <label>
+              密码
+              <input id="passwordInput" name="password" type="password" autocomplete="current-password" required minlength="4" />
+            </label>
+            <label id="nicknameField" class="hidden">
+              昵称
+              <input id="nicknameInput" name="nickname" maxlength="16" />
+            </label>
+            <button class="primary" id="authSubmit" type="submit">登录</button>
+            <p class="form-message" id="authMessage"></p>
+          </form>
+        </section>
 
-        <div class="mini-map" aria-hidden="true">
-          <span></span>
-          <span></span>
-          <span></span>
-          <span></span>
-        </div>
+        <section class="controls-card" aria-label="游戏操作">
+          <div class="score-grid">
+            <div>
+              <span>速度</span>
+              <strong id="speed">1x</strong>
+            </div>
+            <div>
+              <span>排名</span>
+              <strong id="rank">-</strong>
+            </div>
+          </div>
 
-        <p class="note" id="shareStatus">
-          电脑用方向键或 WASD，手机可滑动或点击方向键。
-        </p>
+          <div class="actions">
+            <button class="primary" id="startButton" type="button">开始</button>
+            <button id="pauseButton" type="button">暂停</button>
+            <button id="resetButton" type="button">重开</button>
+          </div>
+
+          <div class="settings">
+            <label for="difficulty">难度</label>
+            <select id="difficulty">
+              <option value="easy">轻松</option>
+              <option value="normal" selected>标准</option>
+              <option value="hard">刺激</option>
+            </select>
+          </div>
+        </section>
+
+        <section class="leaderboard-card" aria-label="积分排行">
+          <div class="panel-title">
+            <h2>积分排行</h2>
+            <span>本机</span>
+          </div>
+          <ol id="leaderboard" class="leaderboard"></ol>
+        </section>
+
+        <p class="note" id="shareStatus">手机可滑动或点击方向键，电脑可用方向键或 WASD。</p>
       </aside>
     </main>
 

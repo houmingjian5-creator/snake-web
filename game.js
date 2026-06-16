@@ -3,6 +3,8 @@ const ctx = canvas.getContext("2d");
 const scoreEl = document.getElementById("score");
 const bestEl = document.getElementById("best");
 const speedEl = document.getElementById("speed");
+const rankEl = document.getElementById("rank");
+const currentPlayerEl = document.getElementById("currentPlayer");
 const overlay = document.getElementById("overlay");
 const overlayTitle = document.getElementById("overlayTitle");
 const overlayHint = document.getElementById("overlayHint");
@@ -12,9 +14,22 @@ const resetButton = document.getElementById("resetButton");
 const difficultyEl = document.getElementById("difficulty");
 const shareButton = document.getElementById("shareButton");
 const shareStatus = document.getElementById("shareStatus");
+const authForm = document.getElementById("authForm");
+const accountInput = document.getElementById("accountInput");
+const passwordInput = document.getElementById("passwordInput");
+const nicknameInput = document.getElementById("nicknameInput");
+const nicknameField = document.getElementById("nicknameField");
+const authMessage = document.getElementById("authMessage");
+const authSubmit = document.getElementById("authSubmit");
+const loginTab = document.getElementById("loginTab");
+const registerTab = document.getElementById("registerTab");
+const logoutButton = document.getElementById("logoutButton");
+const leaderboardEl = document.getElementById("leaderboard");
 
 const grid = 24;
 const cell = canvas.width / grid;
+const accountKey = "snakeAccountsV1";
+const sessionKey = "snakeCurrentAccountV1";
 const difficulties = {
   easy: { tick: 135, speed: "0.8x" },
   normal: { tick: 105, speed: "1x" },
@@ -25,13 +40,179 @@ let snake;
 let food;
 let direction;
 let nextDirection;
-let score;
-let best = Number(localStorage.getItem("snakeBest") || 0);
+let score = 0;
 let running = false;
 let paused = false;
 let gameOver = false;
 let gameTimer = null;
 let touchStart = null;
+let authMode = "login";
+let currentAccount = null;
+
+function loadAccounts() {
+  try {
+    return JSON.parse(localStorage.getItem(accountKey) || "{}");
+  } catch {
+    return {};
+  }
+}
+
+function saveAccounts(accounts) {
+  localStorage.setItem(accountKey, JSON.stringify(accounts));
+}
+
+async function hashPassword(account, password) {
+  const text = `${account.trim().toLowerCase()}::${password}`;
+  const buffer = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(buffer), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function getPlayer() {
+  if (!currentAccount) return null;
+  return loadAccounts()[currentAccount] || null;
+}
+
+function getPlayerBest() {
+  return getPlayer()?.best || 0;
+}
+
+function setAuthMode(mode) {
+  authMode = mode;
+  loginTab.classList.toggle("active", mode === "login");
+  registerTab.classList.toggle("active", mode === "register");
+  nicknameField.classList.toggle("hidden", mode !== "register");
+  authSubmit.textContent = mode === "login" ? "登录" : "注册并进入";
+  authMessage.textContent = "";
+}
+
+async function handleAuth(event) {
+  event.preventDefault();
+  const account = accountInput.value.trim().toLowerCase();
+  const password = passwordInput.value;
+  const nickname = nicknameInput.value.trim() || account;
+  const accounts = loadAccounts();
+
+  if (!/^[a-z0-9_-]{3,18}$/.test(account)) {
+    authMessage.textContent = "账号只能使用 3-18 位字母、数字、下划线或短横线。";
+    return;
+  }
+
+  if (authMode === "register") {
+    if (accounts[account]) {
+      authMessage.textContent = "这个账号已经存在，请直接登录。";
+      return;
+    }
+    accounts[account] = {
+      nickname,
+      passwordHash: await hashPassword(account, password),
+      best: 0,
+      games: 0,
+      createdAt: Date.now(),
+    };
+    saveAccounts(accounts);
+  } else {
+    const player = accounts[account];
+    if (!player || player.passwordHash !== (await hashPassword(account, password))) {
+      authMessage.textContent = "账号或密码不正确。";
+      return;
+    }
+  }
+
+  currentAccount = account;
+  localStorage.setItem(sessionKey, account);
+  authForm.reset();
+  authMessage.textContent = "已进入游戏。";
+  newGame();
+  updateAuthState();
+}
+
+function updateAuthState() {
+  const player = getPlayer();
+  const isLoggedIn = Boolean(player);
+  currentPlayerEl.textContent = player?.nickname || "未登录";
+  startButton.disabled = !isLoggedIn;
+  pauseButton.disabled = !isLoggedIn;
+  resetButton.disabled = !isLoggedIn;
+  logoutButton.disabled = !isLoggedIn;
+  authForm.classList.toggle("hidden", isLoggedIn);
+
+  if (!isLoggedIn) {
+    currentAccount = null;
+    localStorage.removeItem(sessionKey);
+    clearInterval(gameTimer);
+    running = false;
+    showOverlay("请先登录", "创建玩家后即可开始");
+  }
+
+  syncHud();
+  renderLeaderboard();
+}
+
+function logout() {
+  currentAccount = null;
+  localStorage.removeItem(sessionKey);
+  newGame();
+  updateAuthState();
+}
+
+function restoreSession() {
+  const account = localStorage.getItem(sessionKey);
+  if (account && loadAccounts()[account]) {
+    currentAccount = account;
+  }
+}
+
+function saveScore() {
+  if (!currentAccount) return;
+  const accounts = loadAccounts();
+  const player = accounts[currentAccount];
+  if (!player) return;
+  player.best = Math.max(player.best || 0, score);
+  player.games = (player.games || 0) + 1;
+  player.updatedAt = Date.now();
+  saveAccounts(accounts);
+}
+
+function getRank() {
+  if (!currentAccount) return "-";
+  const rows = Object.entries(loadAccounts()).sort((a, b) => (b[1].best || 0) - (a[1].best || 0));
+  const index = rows.findIndex(([account]) => account === currentAccount);
+  return index === -1 ? "-" : `#${index + 1}`;
+}
+
+function renderLeaderboard() {
+  const rows = Object.entries(loadAccounts())
+    .sort((a, b) => (b[1].best || 0) - (a[1].best || 0))
+    .slice(0, 10);
+
+  leaderboardEl.innerHTML = "";
+  if (rows.length === 0) {
+    const empty = document.createElement("li");
+    empty.innerHTML = "<span>-</span><div>暂无玩家<small>注册后开始计分</small></div><strong>0</strong>";
+    leaderboardEl.append(empty);
+    return;
+  }
+
+  rows.forEach(([account, player], index) => {
+    const item = document.createElement("li");
+    item.innerHTML = `
+      <span>${index + 1}</span>
+      <div>${escapeHtml(player.nickname || account)}<small>${escapeHtml(account)}</small></div>
+      <strong>${player.best || 0}</strong>
+    `;
+    leaderboardEl.append(item);
+  });
+}
+
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, (char) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#039;",
+  })[char]);
+}
 
 function newGame() {
   snake = [
@@ -47,10 +228,19 @@ function newGame() {
   placeFood();
   syncHud();
   draw();
-  showOverlay("准备开始", "按空格或点击开始");
+
+  if (getPlayer()) {
+    showOverlay("准备开始", "按开始或滑动方向键");
+  } else {
+    showOverlay("请先登录", "创建玩家后即可开始");
+  }
 }
 
 function startGame() {
+  if (!getPlayer()) {
+    updateAuthState();
+    return;
+  }
   if (gameOver) {
     newGame();
   }
@@ -70,7 +260,7 @@ function pauseGame() {
   pauseButton.textContent = paused ? "继续" : "暂停";
   if (paused) {
     clearInterval(gameTimer);
-    showOverlay("已暂停", "按空格继续");
+    showOverlay("已暂停", "按继续回到游戏");
   } else {
     overlay.classList.add("hidden");
     gameTimer = setInterval(tick, difficulties[difficultyEl.value].tick);
@@ -81,27 +271,23 @@ function endGame() {
   running = false;
   gameOver = true;
   clearInterval(gameTimer);
-  best = Math.max(best, score);
-  localStorage.setItem("snakeBest", String(best));
+  saveScore();
   syncHud();
-  showOverlay("游戏结束", "按重开或空格再来一局");
+  renderLeaderboard();
+  showOverlay("游戏结束", "按重开或开始再来一局");
 }
 
 function tick() {
   direction = nextDirection;
   const head = snake[0];
-  const next = { x: head.x + direction.x, y: head.y + direction.y };
-
+  const next = {
+    x: (head.x + direction.x + grid) % grid,
+    y: (head.y + direction.y + grid) % grid,
+  };
   const willEat = next.x === food.x && next.y === food.y;
   const bodyToCheck = willEat ? snake : snake.slice(0, -1);
 
-  if (
-    next.x < 0 ||
-    next.y < 0 ||
-    next.x >= grid ||
-    next.y >= grid ||
-    bodyToCheck.some((part) => part.x === next.x && part.y === next.y)
-  ) {
+  if (bodyToCheck.some((part) => part.x === next.x && part.y === next.y)) {
     endGame();
     return;
   }
@@ -109,7 +295,6 @@ function tick() {
   snake.unshift(next);
   if (willEat) {
     score += 10;
-    best = Math.max(best, score);
     placeFood();
   } else {
     snake.pop();
@@ -128,6 +313,7 @@ function placeFood() {
 }
 
 function setDirection(x, y) {
+  if (!getPlayer()) return;
   if (nextDirection.x + x === 0 && nextDirection.y + y === 0) return;
   nextDirection = { x, y };
   if (!running) startGame();
@@ -189,8 +375,9 @@ function roundRect(x, y, w, h, r) {
 
 function syncHud() {
   scoreEl.textContent = score;
-  bestEl.textContent = Math.max(best, score);
+  bestEl.textContent = Math.max(getPlayerBest(), score);
   speedEl.textContent = difficulties[difficultyEl.value].speed;
+  rankEl.textContent = getRank();
 }
 
 function showOverlay(title, hint) {
@@ -206,7 +393,7 @@ function handleShare() {
     return;
   }
   navigator.clipboard?.writeText(url);
-  shareStatus.textContent = "当前链接已复制。发布到公网后，把公网链接发给朋友就能玩。";
+  shareStatus.textContent = "当前链接已复制，可以直接发给朋友。";
 }
 
 document.addEventListener("keydown", (event) => {
@@ -244,11 +431,16 @@ canvas.addEventListener("touchend", (event) => {
   const touch = event.changedTouches[0];
   const dx = touch.clientX - touchStart.x;
   const dy = touch.clientY - touchStart.y;
+  touchStart = null;
   if (Math.max(Math.abs(dx), Math.abs(dy)) < 24) return;
   if (Math.abs(dx) > Math.abs(dy)) setDirection(dx > 0 ? 1 : -1, 0);
   else setDirection(0, dy > 0 ? 1 : -1);
 }, { passive: false });
 
+loginTab.addEventListener("click", () => setAuthMode("login"));
+registerTab.addEventListener("click", () => setAuthMode("register"));
+authForm.addEventListener("submit", handleAuth);
+logoutButton.addEventListener("click", logout);
 startButton.addEventListener("click", startGame);
 pauseButton.addEventListener("click", pauseGame);
 resetButton.addEventListener("click", () => {
@@ -266,4 +458,7 @@ difficultyEl.addEventListener("change", () => {
 });
 shareButton.addEventListener("click", handleShare);
 
+setAuthMode("login");
+restoreSession();
 newGame();
+updateAuthState();
